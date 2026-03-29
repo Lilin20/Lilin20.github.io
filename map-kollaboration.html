@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TacMap — Kollaborative Karten</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161920;
+    --surface2: #1e2330;
+    --border: rgba(255,255,255,0.08);
+    --accent: #4f8ef7;
+    --accent2: #e8544a;
+    --green: #3ecf8e;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --font: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); }
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .dot.connected { background: var(--green); }
+  .user-count {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 11px;
+  }
+  .room-badge {
+    background: rgba(79,142,247,0.12);
+    border: 1px solid rgba(79,142,247,0.3);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: all;
+  }
+
+  /* ── Layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    width: 200px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .panel-title {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 12px 14px 6px;
+  }
+  .map-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 8px;
+  }
+  .map-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+  .map-item:hover { background: var(--surface2); color: var(--text); }
+  .map-item.active {
+    background: rgba(79,142,247,0.1);
+    border-color: rgba(79,142,247,0.25);
+    color: var(--accent);
+  }
+  .map-thumb {
+    width: 28px; height: 20px;
+    border-radius: 3px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--muted);
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 8px 0; }
+
+  /* ── Tools ── */
+  .tools {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    width: 100%;
+    text-align: left;
+  }
+  .tool-btn:hover { background: var(--surface2); color: var(--text); }
+  .tool-btn.active {
+    background: rgba(79,142,247,0.1);
+    border-color: rgba(79,142,247,0.3);
+    color: var(--accent);
+  }
+  .tool-icon { font-size: 14px; width: 18px; text-align: center; }
+  .color-row {
+    display: flex;
+    gap: 5px;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+  }
+  .color-dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s;
+  }
+  .color-dot:hover { transform: scale(1.2); }
+  .color-dot.selected { border-color: white; transform: scale(1.15); }
+  .width-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 8px;
+  }
+  .width-row label { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+  .width-row input { flex: 1; accent-color: var(--accent); }
+  .width-val { font-size: 10px; color: var(--muted); min-width: 20px; text-align: right; }
+
+  .chat-section {
+    border-top: 1px solid var(--border);
+  }
+  .chat-messages {
+    height: 110px;
+    overflow-y: auto;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chat-msg {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .chat-msg .nick { font-weight: 600; }
+  .chat-input-row {
+    display: flex;
+    border-top: 1px solid var(--border);
+  }
+  .chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 6px 10px;
+    font-family: var(--font);
+    font-size: 10px;
+    color: var(--text);
+  }
+  .chat-input::placeholder { color: var(--muted); }
+  .chat-send {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    color: var(--accent);
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  /* ── Canvas area ── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #mapImage {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+  }
+  #drawCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+  }
+  #drawCanvas.tool-select { cursor: default; }
+  #drawCanvas.tool-eraser { cursor: cell; }
+  #drawCanvas.tool-text { cursor: text; }
+
+  .cursor-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .remote-cursor {
+    position: absolute;
+    pointer-events: none;
+    transition: left 0.05s, top 0.05s;
+  }
+  .remote-cursor::before {
+    content: '▲';
+    font-size: 14px;
+    display: block;
+    line-height: 1;
+  }
+  .remote-cursor .cur-label {
+    font-size: 9px;
+    font-family: var(--font);
+    background: rgba(0,0,0,0.7);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+    pointer-events: none;
+  }
+  .empty-state .big { font-size: 40px; }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    position: absolute;
+    inset: 20px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    transition: all 0.2s;
+    pointer-events: all;
+    cursor: pointer;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); color: var(--accent); }
+  .upload-zone .big { font-size: 36px; }
+  #fileInput { display: none; }
+
+  /* ── Modal ── */
+  .modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-bg.hidden { display: none; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .modal h2 { font-size: 16px; font-weight: 600; }
+  .modal p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .modal input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+  }
+  .modal input:focus { border-color: var(--accent); }
+  .btn-row { display: flex; gap: 8px; }
+  .btn {
+    flex: 1;
+    padding: 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--surface2); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 600;
+  }
+  .btn.primary:hover { opacity: 0.85; }
+  .btn.danger {
+    background: rgba(232,84,74,0.12);
+    border-color: rgba(232,84,74,0.3);
+    color: var(--accent2);
+  }
+
+  /* ── Undo bar ── */
+  .undo-bar {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    display: flex;
+    gap: 6px;
+    z-index: 20;
+  }
+  .undo-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .undo-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--text);
+    transition: transform 0.3s;
+    z-index: 9999;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  scrollbar-width: thin;
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Setup Modal -->
+<div class="modal-bg" id="setupModal">
+  <div class="modal">
+    <h2>🗺 TacMap</h2>
+    <p>Gib einen Nickname ein und trete einem Raum bei — oder erstelle einen neuen. Teile die Raum-ID mit deinen Kollegen.</p>
+    <input id="nickInput" placeholder="Dein Name (z.B. Alpha-1)" maxlength="20" />
+    <input id="roomInput" placeholder="Raum-ID (leer = neuer Raum)" />
+    <div class="btn-row">
+      <button class="btn primary" onclick="joinRoom()">Beitreten / Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Main UI -->
+<header>
+  <div class="logo">TAC<span>MAP</span></div>
+  <div class="room-badge" id="roomDisplay" title="Klicken zum Kopieren" onclick="copyRoom()">—</div>
+  <div class="status-bar">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Nicht verbunden</span>
+    <div class="user-count" id="userCount">0 online</div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Sidebar -->
+  <aside>
+    <div class="panel-title">Karten</div>
+    <div class="map-list" id="mapList"></div>
+
+    <div style="padding: 8px;">
+      <button class="btn" style="width:100%; font-size:11px;" onclick="document.getElementById('fileInput').click()">
+        + Karte hochladen
+      </button>
+      <input type="file" id="fileInput" accept="image/*" onchange="uploadMap(event)">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="panel-title">Werkzeuge</div>
+    <div class="tools">
+      <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')">
+        <span class="tool-icon">✏️</span> Stift
+      </button>
+      <button class="tool-btn" id="tool-line" onclick="setTool('line')">
+        <span class="tool-icon">📏</span> Linie
+      </button>
+      <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')">
+        <span class="tool-icon">➡️</span> Pfeil
+      </button>
+      <button class="tool-btn" id="tool-rect" onclick="setTool('rect')">
+        <span class="tool-icon">⬜</span> Rechteck
+      </button>
+      <button class="tool-btn" id="tool-circle" onclick="setTool('circle')">
+        <span class="tool-icon">⭕</span> Kreis
+      </button>
+      <button class="tool-btn" id="tool-text" onclick="setTool('text')">
+        <span class="tool-icon">🔤</span> Text
+      </button>
+      <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')">
+        <span class="tool-icon">🗑</span> Radierer
+      </button>
+    </div>
+
+    <div class="color-row" id="colorRow"></div>
+    <div class="width-row">
+      <label>Breite</label>
+      <input type="range" id="widthSlider" min="1" max="20" value="3" oninput="updateWidth(this.value)">
+      <span class="width-val" id="widthVal">3</span>
+    </div>
+
+    <div class="divider"></div>
+    <div class="chat-section">
+      <div class="panel-title">Chat</div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput" placeholder="Nachricht..." onkeydown="chatKey(event)" maxlength="200">
+        <button class="chat-send" onclick="sendChat()">↑</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <img id="mapImage" src="" style="display:none;">
+    <canvas id="drawCanvas"></canvas>
+    <div class="cursor-layer" id="cursorLayer"></div>
+
+    <div class="empty-state" id="emptyState">
+      <div class="big">🗺</div>
+      <div>Lade eine Karte hoch um zu starten</div>
+      <div style="font-size:10px; color: #444">PNG, JPG, WebP — beliebige Bildgröße</div>
+    </div>
+
+    <div class="undo-bar">
+      <button class="undo-btn" onclick="undo()" title="Rückgängig (Ctrl+Z)">↩ Undo</button>
+      <button class="undo-btn" onclick="clearAll()" title="Alles löschen">🗑 Leeren</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let myId = Math.random().toString(36).slice(2, 9);
+let myNick = '';
+let myColor = '#4f8ef7';
+let roomId = '';
+let ws = null;
+let connected = false;
+
+let currentTool = 'pen';
+let strokeColor = '#4f8ef7';
+let strokeWidth = 3;
+
+let isDrawing = false;
+let startX, startY;
+let snapshotBeforeStroke = null;
+
+const canvas = document.getElementById('drawCanvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvasWrap');
+const mapImg = document.getElementById('mapImage');
+
+let strokes = []; // history
+let previewStroke = null;
+let penPoints = [];
+
+let maps = []; // {id, name, dataUrl, strokes:[]}
+let currentMapId = null;
+
+let remoteCursors = {};
+let lastCursorSend = 0;
+
+const COLORS = ['#4f8ef7','#e8544a','#3ecf8e','#f5a623','#b67cff','#fff','#ffeb3b','#00bcd4','#ff69b4','#ff8c00'];
+
+// ══════════════════════════════════════════════
+// INIT UI
+// ══════════════════════════════════════════════
+function initColors() {
+  const row = document.getElementById('colorRow');
+  row.innerHTML = '';
+  COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color-dot' + (c === strokeColor ? ' selected' : '');
+    d.style.background = c;
+    d.style.border = c === '#fff' ? '2px solid #444' : '';
+    d.onclick = () => {
+      strokeColor = c;
+      document.querySelectorAll('.color-dot').forEach(x => x.classList.remove('selected'));
+      d.classList.add('selected');
+    };
+    row.appendChild(d);
+  });
+}
+initColors();
+
+function updateWidth(v) {
+  strokeWidth = parseInt(v);
+  document.getElementById('widthVal').textContent = v;
+}
+
+function setTool(t) {
+  currentTool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + t)?.classList.add('active');
+  canvas.className = 'tool-' + t;
+}
+
+// ══════════════════════════════════════════════
+// RESIZE CANVAS
+// ══════════════════════════════════════════════
+function resizeCanvas() {
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = W; canvas.height = H;
+  redrawAll();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ══════════════════════════════════════════════
+// MAP LIST
+// ══════════════════════════════════════════════
+function renderMapList() {
+  const list = document.getElementById('mapList');
+  list.innerHTML = '';
+  if (maps.length === 0) {
+    list.innerHTML = '<div style="font-size:10px;color:#444;padding:8px 10px;">Keine Karten</div>';
+    return;
+  }
+  maps.forEach(m => {
+    const d = document.createElement('div');
+    d.className = 'map-item' + (m.id === currentMapId ? ' active' : '');
+    d.innerHTML = `
+      <div class="map-thumb" style="background-image:url(${m.dataUrl});background-size:cover;"></div>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.name}</span>`;
+    d.onclick = () => switchMap(m.id);
+    list.appendChild(d);
+  });
+}
+
+function switchMap(id) {
+  if (currentMapId === id) return;
+  saveCurrentStrokes();
+  currentMapId = id;
+  const m = maps.find(x => x.id === id);
+  if (!m) return;
+  strokes = m.strokes || [];
+  mapImg.src = m.dataUrl;
+  mapImg.style.display = '';
+  document.getElementById('emptyState').style.display = 'none';
+  redrawAll();
+  renderMapList();
+  broadcast({ type: 'switch_map', mapId: id });
+}
+
+function saveCurrentStrokes() {
+  if (!currentMapId) return;
+  const m = maps.find(x => x.id === currentMapId);
+  if (m) m.strokes = [...strokes];
+}
+
+function uploadMap(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const map = { id: Date.now().toString(36), name: file.name.replace(/\.[^.]+$/, ''), dataUrl: ev.target.result, strokes: [] };
+    maps.push(map);
+    broadcast({ type: 'map_upload', map: { id: map.id, name: map.name, dataUrl: map.dataUrl } });
+    switchMap(map.id);
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+// ══════════════════════════════════════════════
+// DRAWING
+// ══════════════════════════════════════════════
+function redrawAll() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  (strokes || []).forEach(s => drawStroke(s));
+  if (previewStroke) drawStroke(previewStroke);
+}
+
+function drawStroke(s) {
+  ctx.save();
+  ctx.strokeStyle = s.color || '#fff';
+  ctx.lineWidth = s.width || 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (s.tool === 'pen') {
+    if (!s.points || s.points.length < 2) { ctx.restore(); return; }
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    s.points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  } else if (s.tool === 'line' || s.tool === 'arrow') {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+    if (s.tool === 'arrow') drawArrowHead(s.x1, s.y1, s.x2, s.y2, s.color, s.width);
+  } else if (s.tool === 'rect') {
+    ctx.strokeRect(s.x1, s.y1, s.x2 - s.x1, s.y2 - s.y1);
+  } else if (s.tool === 'circle') {
+    const rx = Math.abs(s.x2 - s.x1) / 2, ry = Math.abs(s.y2 - s.y1) / 2;
+    const cx = (s.x1 + s.x2) / 2, cy = (s.y1 + s.y2) / 2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (s.tool === 'text') {
+    ctx.fillStyle = s.color;
+    ctx.font = `${(s.width || 3) * 5 + 8}px JetBrains Mono, monospace`;
+    ctx.fillText(s.text || '', s.x1, s.y1);
+  } else if (s.tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    if (!s.points || s.points.length < 2) { ctx.restore(); return; }
+    ctx.lineWidth = (s.width || 3) * 5;
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    s.points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawArrowHead(x1, y1, x2, y2, color, width) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = (width || 2) * 4 + 8;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.translate(x2, y2);
+  ctx.rotate(angle);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-size, -size / 2.5);
+  ctx.lineTo(-size, size / 2.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
+  return { x: touch.clientX - r.left, y: touch.clientY - r.top };
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mousemove', moveDraw);
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e); }, { passive: false });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); moveDraw(e); }, { passive: false });
+canvas.addEventListener('touchend', endDraw);
+
+function startDraw(e) {
+  if (!currentMapId) return;
+  if (currentTool === 'text') { handleTextTool(e); return; }
+  isDrawing = true;
+  const p = getPos(e);
+  startX = p.x; startY = p.y;
+  penPoints = [{ x: p.x, y: p.y }];
+}
+
+function moveDraw(e) {
+  const p = getPos(e);
+  // cursor broadcast
+  const now = Date.now();
+  if (now - lastCursorSend > 40) {
+    broadcast({ type: 'cursor', x: p.x / canvas.width, y: p.y / canvas.height });
+    lastCursorSend = now;
+  }
+  if (!isDrawing || !currentMapId) return;
+
+  if (currentTool === 'pen' || currentTool === 'eraser') {
+    penPoints.push({ x: p.x, y: p.y });
+    previewStroke = { tool: currentTool, color: strokeColor, width: strokeWidth, points: penPoints };
+    // Live broadcast partial
+    broadcast({ type: 'stroke_partial', stroke: previewStroke });
+  } else {
+    previewStroke = { tool: currentTool, color: strokeColor, width: strokeWidth, x1: startX, y1: startY, x2: p.x, y2: p.y };
+  }
+  redrawAll();
+}
+
+function endDraw(e) {
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (!previewStroke) return;
+  const s = { ...previewStroke, id: myId + '_' + Date.now() };
+  strokes.push(s);
+  previewStroke = null;
+  redrawAll();
+  broadcast({ type: 'stroke', stroke: s });
+}
+
+function handleTextTool(e) {
+  const p = getPos(e);
+  const txt = prompt('Text eingeben:');
+  if (!txt) return;
+  const s = { tool: 'text', color: strokeColor, width: strokeWidth, x1: p.x, y1: p.y, text: txt, id: myId + '_' + Date.now() };
+  strokes.push(s);
+  redrawAll();
+  broadcast({ type: 'stroke', stroke: s });
+}
+
+function undo() {
+  if (!strokes.length) return;
+  strokes.pop();
+  redrawAll();
+  broadcast({ type: 'undo' });
+}
+
+function clearAll() {
+  if (!confirm('Alle Zeichnungen auf dieser Karte löschen?')) return;
+  strokes = [];
+  redrawAll();
+  broadcast({ type: 'clear' });
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+  if (e.key === 'Escape') { isDrawing = false; previewStroke = null; redrawAll(); }
+});
+
+// ══════════════════════════════════════════════
+// WEBSOCKET — using wss://socketsbay.com (free, no signup)
+// ══════════════════════════════════════════════
+function connectWS() {
+  const url = `wss://socketsbay.com/wss/v2/1/${roomId}/`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    connected = true;
+    setStatus(true);
+    // send join
+    broadcast({ type: 'join', nick: myNick, color: myColor });
+    // send full state to newcomers after a short delay
+    setTimeout(() => {
+      broadcast({ type: 'full_state', maps: maps.map(m => ({ id: m.id, name: m.name, dataUrl: m.dataUrl })), currentMapId, strokes });
+    }, 300);
+  };
+
+  ws.onclose = () => {
+    connected = false;
+    setStatus(false);
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.from === myId) return;
+    handleMsg(msg);
+  };
+}
+
+function broadcast(data) {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ from: myId, ...data }));
+}
+
+function handleMsg(msg) {
+  switch (msg.type) {
+    case 'join':
+      addChat(`» ${msg.nick} ist beigetreten`, msg.color);
+      // send state back to new joiner
+      setTimeout(() => {
+        broadcast({ type: 'full_state', maps: maps.map(m => ({ id: m.id, name: m.name, dataUrl: m.dataUrl })), currentMapId, strokes });
+      }, 500);
+      break;
+
+    case 'full_state':
+      if (maps.length === 0 && msg.maps && msg.maps.length > 0) {
+        msg.maps.forEach(m => {
+          if (!maps.find(x => x.id === m.id)) maps.push({ ...m, strokes: [] });
+        });
+        if (msg.currentMapId && !currentMapId) {
+          const m = maps.find(x => x.id === msg.currentMapId);
+          if (m) {
+            currentMapId = m.id;
+            strokes = msg.strokes || [];
+            m.strokes = [...strokes];
+            mapImg.src = m.dataUrl;
+            mapImg.style.display = '';
+            document.getElementById('emptyState').style.display = 'none';
+            redrawAll();
+          }
+        }
+        renderMapList();
+      }
+      break;
+
+    case 'map_upload':
+      if (!maps.find(x => x.id === msg.map.id)) {
+        maps.push({ ...msg.map, strokes: [] });
+        renderMapList();
+        toast(`Neue Karte: ${msg.map.name}`);
+      }
+      break;
+
+    case 'switch_map':
+      if (msg.mapId !== currentMapId) {
+        saveCurrentStrokes();
+        currentMapId = msg.mapId;
+        const m = maps.find(x => x.id === msg.mapId);
+        if (m) {
+          strokes = m.strokes || [];
+          mapImg.src = m.dataUrl;
+          mapImg.style.display = '';
+          document.getElementById('emptyState').style.display = 'none';
+          redrawAll();
+          renderMapList();
+        }
+      }
+      break;
+
+    case 'stroke':
+      if (msg.stroke) {
+        if (!strokes.find(s => s.id === msg.stroke.id)) strokes.push(msg.stroke);
+        redrawAll();
+      }
+      break;
+
+    case 'stroke_partial':
+      previewStroke = msg.stroke;
+      redrawAll();
+      break;
+
+    case 'undo':
+      if (strokes.length) { strokes.pop(); redrawAll(); }
+      break;
+
+    case 'clear':
+      strokes = []; redrawAll();
+      break;
+
+    case 'cursor':
+      updateRemoteCursor(msg.from, msg.x, msg.y, msg.nick || msg.from);
+      break;
+
+    case 'chat':
+      addChat(`${msg.nick}: ${msg.text}`, msg.color);
+      break;
+  }
+}
+
+// ══════════════════════════════════════════════
+// CURSORS
+// ══════════════════════════════════════════════
+function updateRemoteCursor(id, rx, ry, nick) {
+  let el = remoteCursors[id];
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'remote-cursor';
+    el.innerHTML = `<div class="cur-label">${nick || id}</div>`;
+    document.getElementById('cursorLayer').appendChild(el);
+    remoteCursors[id] = el;
+  }
+  const x = rx * canvas.width, y = ry * canvas.height;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.color = '#4f8ef7';
+}
+
+// ══════════════════════════════════════════════
+// CHAT
+// ══════════════════════════════════════════════
+function addChat(text, color) {
+  const box = document.getElementById('chatMessages');
+  const d = document.createElement('div');
+  d.className = 'chat-msg';
+  d.innerHTML = `<span style="color:${color || '#6b7280'}">${text}</span>`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function chatKey(e) {
+  if (e.key === 'Enter') sendChat();
+}
+
+function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const txt = inp.value.trim();
+  if (!txt) return;
+  inp.value = '';
+  addChat(`${myNick}: ${txt}`, myColor);
+  broadcast({ type: 'chat', nick: myNick, text: txt, color: myColor });
+}
+
+// ══════════════════════════════════════════════
+// STATUS
+// ══════════════════════════════════════════════
+function setStatus(on) {
+  document.getElementById('statusDot').className = 'dot' + (on ? ' connected' : '');
+  document.getElementById('statusText').textContent = on ? 'Verbunden' : 'Verbinde...';
+  updateUserCount();
+}
+
+function updateUserCount() {
+  const n = Object.keys(remoteCursors).length + 1;
+  document.getElementById('userCount').textContent = n + ' online';
+}
+
+function copyRoom() {
+  navigator.clipboard?.writeText(roomId).then(() => toast('Raum-ID kopiert!'));
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ══════════════════════════════════════════════
+// JOIN MODAL
+// ══════════════════════════════════════════════
+function joinRoom() {
+  const nick = document.getElementById('nickInput').value.trim();
+  const room = document.getElementById('roomInput').value.trim();
+  if (!nick) { alert('Bitte gib einen Namen ein.'); return; }
+
+  myNick = nick;
+  myColor = COLORS[Math.floor(Math.random() * 5)];
+  roomId = room || Math.random().toString(36).slice(2, 9).toUpperCase();
+
+  document.getElementById('roomDisplay').textContent = roomId;
+  document.getElementById('setupModal').classList.add('hidden');
+
+  addChat(`Du bist Raum "${roomId}" beigetreten`, '#6b7280');
+  connectWS();
+  renderMapList();
+}
+
+// Drag-and-drop on canvas wrap
+wrap.addEventListener('dragover', e => { e.preventDefault(); });
+wrap.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const map = { id: Date.now().toString(36), name: file.name.replace(/\.[^.]+$/, ''), dataUrl: ev.target.result, strokes: [] };
+    maps.push(map);
+    broadcast({ type: 'map_upload', map: { id: map.id, name: map.name, dataUrl: map.dataUrl } });
+    switchMap(map.id);
+  };
+  reader.readAsDataURL(file);
+});
+</script>
+</body>
+</html>
